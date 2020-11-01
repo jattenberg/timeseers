@@ -6,8 +6,13 @@ import pymc3 as pm
 
 class LinearTrend(TimeSeriesModel):
     def __init__(
-            self, name: str = None, n_changepoints=None, changepoints_prior_scale=0.05, growth_prior_scale=1,
-            pool_cols=None, pool_type='complete'
+        self,
+        name: str = None,
+        n_changepoints=None,
+        changepoints_prior_scale=0.05,
+        growth_prior_scale=1,
+        pool_cols=None,
+        pool_type="complete",
     ):
         self.n_changepoints = n_changepoints
         self.changepoints_prior_scale = changepoints_prior_scale
@@ -19,41 +24,63 @@ class LinearTrend(TimeSeriesModel):
 
     def definition(self, model, X, scale_factor):
         t = X["t"].values
-        group, n_groups, self.groups_ = get_group_definition(X, self.pool_cols, self.pool_type)
+        group, n_groups, self.groups_ = get_group_definition(
+            X, self.pool_cols, self.pool_type
+        )
         self.s = np.linspace(0, np.max(t), self.n_changepoints + 2)[1:-1]
 
         with model:
             A = (t[:, None] > self.s) * 1.0
 
-            if self.pool_type == 'partial':
-                sigma_k = pm.HalfCauchy(self._param_name('sigma_k'), beta=self.growth_prior_scale)
-                offset_k = pm.Normal(self._param_name('offset_k'), mu=0, sd=1, shape=n_groups)
+            if self.pool_type == "partial":
+                sigma_k = pm.HalfCauchy(
+                    self._param_name("sigma_k"), beta=self.growth_prior_scale
+                )
+                offset_k = pm.Normal(
+                    self._param_name("offset_k"), mu=0, sd=1, shape=n_groups
+                )
                 k = pm.Deterministic(self._param_name("k"), offset_k * sigma_k)
 
-                sigma_delta = pm.HalfCauchy(self._param_name('sigma_delta'), beta=self.changepoints_prior_scale)
-                offset_delta = pm.Laplace(self._param_name('offset_delta'), 0, 1, shape=(n_groups, self.n_changepoints))
-                delta = pm.Deterministic(self._param_name("delta"), offset_delta * sigma_delta)
+                sigma_delta = pm.HalfCauchy(
+                    self._param_name("sigma_delta"), beta=self.changepoints_prior_scale
+                )
+                offset_delta = pm.Laplace(
+                    self._param_name("offset_delta"),
+                    0,
+                    1,
+                    shape=(n_groups, self.n_changepoints),
+                )
+                delta = pm.Deterministic(
+                    self._param_name("delta"), offset_delta * sigma_delta
+                )
 
             else:
                 delta = pm.Laplace(
-                    self._param_name("delta"), 0, self.changepoints_prior_scale, shape=(n_groups, self.n_changepoints)
+                    self._param_name("delta"),
+                    0,
+                    self.changepoints_prior_scale,
+                    shape=(n_groups, self.n_changepoints),
                 )
-                k = pm.Normal(self._param_name("k"), 0, self.growth_prior_scale, shape=n_groups)
+                k = pm.Normal(
+                    self._param_name("k"), 0, self.growth_prior_scale, shape=n_groups
+                )
 
             m = pm.Normal(self._param_name("m"), 0, 5, shape=n_groups)
 
             gamma = -self.s * delta[group, :]
 
-            g = (
-                (k[group] + pm.math.sum(A * delta[group], axis=1)) * t
-                + (m[group] + pm.math.sum(A * gamma, axis=1))
+            g = (k[group] + pm.math.sum(A * delta[group], axis=1)) * t + (
+                m[group] + pm.math.sum(A * gamma, axis=1)
             )
         return g
 
     def _predict(self, trace, t, pool_group=0):
         A = (t[:, None] > self.s) * 1
 
-        k, m = trace[self._param_name("k")][:, pool_group], trace[self._param_name("m")][:, pool_group]
+        k, m = (
+            trace[self._param_name("k")][:, pool_group],
+            trace[self._param_name("m")][:, pool_group],
+        )
         growth = k + A @ trace[self._param_name("delta")][:, pool_group].T
         gamma = -self.s[:, None] * trace[self._param_name("delta")][:, pool_group].T
         offset = m + A @ gamma
@@ -76,6 +103,8 @@ class LinearTrend(TimeSeriesModel):
         return trend_return
 
     def __repr__(self):
-        return f"LinearTrend(n_changepoints={self.n_changepoints}, " \
-               f"changepoints_prior_scale={self.changepoints_prior_scale}, " \
-               f"growth_prior_scale={self.growth_prior_scale})"
+        return (
+            f"LinearTrend(n_changepoints={self.n_changepoints}, "
+            f"changepoints_prior_scale={self.changepoints_prior_scale}, "
+            f"growth_prior_scale={self.growth_prior_scale})"
+        )
