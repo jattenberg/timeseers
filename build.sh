@@ -14,7 +14,7 @@ fi
 virtualenv $venv
 
 echo "installing $name"
-$venv/bin/pip install -e .
+$venv/bin/pip install -e .[dev]
 
 
 echo "===================="
